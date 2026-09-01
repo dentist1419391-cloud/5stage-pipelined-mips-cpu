@@ -2,9 +2,9 @@
 
 Verilog HDL 기반의 32-bit 5-stage Pipelined MIPS CPU입니다.
 
-명령어 실행을 IF, ID, EX, MEM, WB의 5개 Stage로 구성하고, Pipeline 구조에서 발생하는 Data Hazard와 Control Hazard를 처리하기 위한 Forwarding, Stall, Flush 로직 구현.
+명령어 실행을 IF, ID, EX, MEM, WB의 5개 Stage로 구성하고, Pipeline에서 발생하는 Data Hazard와 Control Hazard를 처리하기 위한 Forwarding, Stall, Flush 로직을 구현했습니다.
 
-Hazard가 발생하는 명령어 시퀀스를 직접 구성하고 Vivado Behavioral Simulation에서 Pipeline 내부 Data Path와 Control Signal을 확인했습니다.
+Hazard가 발생하는 명령어 시퀀스를 구성하고 Vivado Behavioral Simulation에서 Pipeline 내부 신호와 연산 결과를 검증했습니다. 합성 후에는 Static Timing Analysis를 통해 100 MHz Timing Constraint 만족 여부를 확인했습니다.
 
 ---
 
@@ -48,7 +48,9 @@ CPU를 IF, ID, EX, MEM, WB의 5개 Stage로 구성.
 
 ### Pipeline 동작 확인
 
-PC가 4씩 증가하며 각 명령어가 IF → ID → EX → MEM → WB 순서로 이동하는 것을 Simulation에서 확인.
+Reset 해제 후 `PC[31:0]`가 `0 → 4 → 8 → 12 → ...` 순서로 증가하는 것을 확인.
+
+첫 번째 `add $1, $2, $3` 명령어(`0x00430820`)가 `Instruction_IF` → `Instruction_ID` → `Instruction_EX` → `Instruction_MEM` → `Instruction_WB` 순서로 이동하며 5-stage Pipeline이 동작하는 것을 확인.
 
 ![Pipeline Flow](image/pipeline_flow.png)
 
@@ -56,60 +58,67 @@ PC가 4씩 증가하며 각 명령어가 IF → ID → EX → MEM → WB 순서�
 
 # Verification
 
-Hazard가 발생하는 명령어 시퀀스를 구성하고 Vivado Behavioral Simulation에서 Pipeline의 Data Path와 Control Signal을 확인.
-
-주요 관측 신호:
-
-- `PC`
-- Stage별 Instruction
-- `ForwardA`, `ForwardB`
-- `Stall`
-- `Branch_EX`
-- `Zero`
-- `Branchtaken_EX`
-- `Flush_IF_ID`
-- `Flush_ID_EX`
-- Write Back Data
+Hazard가 발생하도록 명령어 시퀀스를 구성하고 Vivado Behavioral Simulation에서 Pipeline 내부 Data Path와 Control Signal을 확인했습니다.
 
 ---
 
 ## Data Hazard
 
-Pipeline에서 이전 명령어의 연산 결과가 Register File에 반영되기 전에 다음 명령어가 해당 Register 값을 필요로 할 경우 RAW Hazard 발생.
+이전 명령어의 연산 결과가 Register File에 반영되기 전에 다음 명령어가 해당 Register 값을 필요로 하는 경우 RAW Hazard 발생.
 
-일반적인 RAW Hazard는 EX/MEM, MEM/WB Pipeline Register의 결과를 ALU 입력으로 직접 전달하는 Forwarding 방식으로 처리.
+일반적인 RAW Hazard는 EX/MEM, MEM/WB Pipeline Register에 저장된 결과를 EX Stage의 ALU 입력으로 전달하는 Forwarding으로 처리.
 
-Forwarding Unit에서 `RegWrite_MEM`, `RegWrite_WB`와 Source/Destination Register를 비교하여 `ForwardA`, `ForwardB` 신호 생성.
+Forwarding Unit에서 EX Stage의 Source Register와 MEM, WB Stage의 Destination Register를 비교하여 `ForwardA[1:0]`, `ForwardB[1:0]` 신호 생성.
 
-- `Forward = 10` : EX/MEM 결과 선택
-- `Forward = 01` : MEM/WB 결과 선택
-- 동시 조건 발생 시 `EX/MEM > MEM/WB` 우선순위 적용
+- `Forward = 10` : EX/MEM 경로 선택
+- `Forward = 01` : MEM/WB 경로 선택
+- 두 조건이 동시에 성립하는 경우 EX/MEM Forwarding 우선
 
-`lw` 직후 Load Data를 사용하는 Load-use Hazard는 Load 결과가 MEM Stage 이후에 유효해지므로 Forwarding만으로 처리 불가.
+`lw` 직후 Load Data를 사용하는 Load-use Hazard는 Load Data가 MEM Stage 이후에 유효해지기 때문에 Forwarding만으로 처리할 수 없음.
 
-Load-use Hazard 발생 시 1-cycle Stall과 Bubble 삽입 후 MEM/WB Forwarding을 통해 최신 값 전달.
+이 경우 1-cycle Stall과 Bubble을 삽입한 후 MEM/WB의 Load Data를 Forwarding하여 처리.
 
 ---
 
 ## 1. EX/MEM Forwarding
 
-바로 이전 명령어의 연산 결과를 다음 명령어에서 사용하는 경우.
+바로 이전 명령어의 연산 결과를 다음 명령어가 사용하는 경우.
+
+### 검증 명령어
 
 ```text
 add $1, $2, $3
 sub $4, $1, $3
 ```
 
-`add` 결과가 Register File에 Write Back되기 전에 다음 `sub` 명령어에서 `$1` 사용.
-
-EX/MEM Pipeline Register의 ALU 결과를 EX Stage 입력으로 직접 전달.
-
-Simulation에서 EX/MEM Forwarding 발생과 최종 연산 결과 확인.
+Instruction Code:
 
 ```text
-$1 = 19
-$4 = 9
+add $1, $2, $3  → 0x00430820
+sub $4, $1, $3  → 0x00232022
 ```
+
+`sub` 명령어가 EX Stage에 진입한 시점에서 바로 이전 `add` 명령어는 MEM Stage에 위치.
+
+### 파형 관측
+
+```text
+Instruction_EX      = 0x00232022
+Instruction_MEM     = 0x00430820
+
+Write_register_MEM  = 1
+rs_EX               = 1
+
+ForwardA            = 10
+
+Read_data1          = 19
+Read_data2          = 10
+ALU_result           = 9
+```
+
+`Write_register_MEM = 1`과 `rs_EX = 1`이 일치하고 `ForwardA = 10` 발생.
+
+파형에서 `Read_data1 = 19`가 입력되고 `Read_data2 = 10`과 `sub` 연산 후 `ALU_result = 9`가 출력되는 것을 확인.
 
 ![EX/MEM Forwarding](image/exmem_forwarding.png)
 
@@ -119,22 +128,37 @@ $4 = 9
 
 한 명령어 간격을 두고 이전 연산 결과를 사용하는 경우.
 
+### 검증 명령어
+
 ```text
 add $1, $2, $3
 nop
 sub $4, $1, $3
 ```
 
-`add` 결과가 MEM/WB Stage에 있는 시점에 `sub`가 해당 Register 값을 사용.
+`nop`을 삽입하여 `sub` 명령어가 EX Stage에 진입할 때 `add`의 결과가 WB Stage에 위치하도록 구성.
 
-MEM/WB의 Write Back Data를 EX Stage ALU 입력으로 전달.
-
-Simulation에서 MEM/WB Forwarding 동작과 최종 결과 확인.
+### 파형 관측
 
 ```text
-$1 = 19
-$4 = 9
+Instruction_EX     = 0x00232022
+
+Write_register_MEM = 0
+Write_register_WB  = 1
+rs_EX              = 1
+
+ForwardA           = 01
+
+Read_data1         = 19
+Read_data2         = 10
+ALU_result          = 9
 ```
+
+`Write_register_WB = 1`과 `rs_EX = 1`이 일치하고 EX/MEM Forwarding 조건은 성립하지 않는 상태.
+
+이때 `ForwardA = 01`이 발생하며 WB Stage의 값을 사용.
+
+`Read_data1 = 19`, `Read_data2 = 10`, `ALU_result = 9`를 통해 MEM/WB Forwarding 동작 확인.
 
 ![MEM/WB Forwarding](image/memwb_forwarding.png)
 
@@ -142,7 +166,9 @@ $4 = 9
 
 ## 3. Forwarding Priority
 
-EX/MEM과 MEM/WB에 동일한 Destination Register의 결과가 존재할 경우 가장 최근 값을 선택해야 함.
+EX/MEM과 MEM/WB에 동일한 Destination Register의 결과가 존재하는 경우 가장 최근 연산 결과를 사용해야 함.
+
+### 검증 명령어
 
 ```text
 add $1, $2, $3
@@ -150,18 +176,37 @@ sub $1, $5, $6
 add $4, $1, $7
 ```
 
-마지막 `add` 명령어가 `$1`을 사용할 때 두 Forwarding 조건이 동시에 발생할 수 있음.
-
-MEM/WB의 이전 `add` 결과보다 EX/MEM의 최신 `sub` 결과를 우선하도록 `EX/MEM > MEM/WB` 우선순위 적용.
+연산 결과:
 
 ```text
 첫 번째 add  → $1 = 19
 sub          → $1 = 6
-마지막 add   → 최신 $1 = 6 사용
-$4 = 9
+마지막 add   → $4 = 6 + 3 = 9
 ```
 
-Simulation에서 EX/MEM의 최신 값이 선택되는 것을 확인.
+마지막 `add`가 `$1`을 사용할 때 MEM/WB에는 이전 값 `19`, EX/MEM에는 더 최근 값 `6`이 존재.
+
+### 파형 관측
+
+```text
+Instruction_EX     = 0x00272020
+
+Write_register_MEM = 1
+Write_register_WB  = 1
+rs_EX              = 1
+
+ForwardA           = 10
+
+Read_data1         = 6
+Read_data2         = 3
+ALU_result          = 9
+```
+
+MEM과 WB Stage의 Destination Register가 모두 `1`인 조건에서 `ForwardA = 10` 발생.
+
+MEM/WB의 이전 값 `19`가 아닌 EX/MEM의 최신 값 `6`이 `Read_data1`에서 관측되며, 최종적으로 `ALU_result = 9` 출력.
+
+이를 통해 `EX/MEM > MEM/WB` Forwarding 우선순위 확인.
 
 ![Forwarding Priority](image/forwarding_priority.png)
 
@@ -169,41 +214,63 @@ Simulation에서 EX/MEM의 최신 값이 선택되는 것을 확인.
 
 ## 4. Load-use Hazard
 
-`lw` 명령어가 Memory에서 읽은 값을 바로 다음 명령어에서 사용하는 경우.
+`lw` 명령어가 Memory에서 읽은 값을 바로 다음 명령어가 사용하는 경우.
+
+### 검증 명령어
 
 ```text
 lw  $6, 400($0)
 add $7, $5, $6
 ```
 
-Load Data는 MEM Stage 이후에 유효해지므로 바로 다음 명령어의 EX Stage에서 사용할 수 없음.
-
-`MemRead_EX = 1`이고 `rt_EX`와 다음 명령어의 Source Register가 일치하는 경우 Load-use Hazard로 판별.
-
-### Hazard 처리
-
-1. PC Hold
-2. IF/ID Pipeline Register Hold
-3. ID/EX Control Signal을 0으로 설정
-4. Bubble 삽입
-5. 1-cycle Stall
-6. 다음 Cycle에서 MEM/WB Forwarding
-
-검증 조건:
+Instruction Code:
 
 ```text
-Memory[100] = 100
+lw  $6, 400($0)  → 0x8c060190
+add $7, $5, $6   → 0x00a63820
+```
+
+Load Data는 MEM Stage 이후에 유효해지므로 바로 다음 `add`의 EX Stage에서 사용할 수 없음.
+
+### Hazard 검출
+
+`lw`가 EX Stage, `add`가 ID Stage에 위치한 Cycle에서 다음 신호 확인.
+
+```text
+Instruction_EX = 0x8c060190
+Instruction_ID = 0x00a63820
+
+MemRead_EX     = 1
+rt_EX          = 6
+rt_ID          = 6
+
+Stall          = 1
+```
+
+`MemRead_EX = 1`이고 `lw`의 Destination Register인 `$6`을 다음 `add`가 Source Register로 사용하므로 `Stall = 1` 발생.
+
+Stall이 발생한 동안 `PC[31:0]`가 `92`에서 한 Cycle 더 유지되어 PC Hold 동작 확인.
+
+### Stall 이후 Forwarding
+
+Load Data가 WB Stage까지 이동한 후:
+
+```text
+Write_data_reg_WB = 100
+ForwardB          = 1
+ALU_result         = 112
+```
+
+`Write_data_reg_WB[31:0] = 100`이 관측되고 Forwarding을 통해 `add`의 두 번째 Operand로 전달.
+
+```text
 $5 = 12
-```
-
-최종 결과:
-
-```text
 $6 = 100
-$7 = 12 + 100 = 112
+
+12 + 100 = 112
 ```
 
-Simulation에서 Stall 발생 후 MEM/WB Forwarding을 통해 정상 연산되는 것을 확인.
+최종 `ALU_result[31:0] = 112`를 통해 1-cycle Stall 이후 Load Data가 정상적으로 사용되는 것을 확인.
 
 ![Load-use Hazard](image/load_use_stall.png)
 
@@ -211,20 +278,28 @@ Simulation에서 Stall 발생 후 MEM/WB Forwarding을 통해 정상 연산되�
 
 ## Control Hazard
 
-Branch 또는 Jump 명령어의 분기 결과가 확정되기 전에 후속 명령어가 이미 Pipeline에 진입하면서 Control Hazard 발생.
+Branch 또는 Jump의 분기 결과가 확정되기 전에 후속 명령어가 Pipeline에 진입하는 경우 Control Hazard 발생.
 
-잘못 진입한 명령어를 Pipeline Register에서 Flush하여 처리.
+Branch는 EX Stage에서 Taken 여부 결정, Jump는 ID Stage에서 Target 결정.
+
+분기 결과에 따라 잘못 진입한 명령어를 Pipeline Register에서 Flush.
 
 ---
 
 ## 5. Branch Not Taken / Taken
 
-Branch 명령어는 ID Stage에서 Decode되며, 실제 Taken 여부는 EX Stage에서 `Branch_EX && Zero`를 통해 결정.
-
 ### Branch Not Taken
+
+검증 명령어:
 
 ```text
 beq $10, $11, 4
+```
+
+Instruction Code:
+
+```text
+0x114b0004
 ```
 
 Register 초기값:
@@ -234,41 +309,67 @@ $10 = 4
 $11 = 1
 ```
 
-두 값이 다르므로 `Zero = 0`.
+### 파형 관측
 
 ```text
-Branch_EX      = 1
-Zero           = 0
-Branchtaken_EX = 0
-Flush_IF_ID    = 0
-Flush_ID_EX    = 0
+Instruction_EX  = 0x114b0004
+
+Branch_EX       = 1
+Zero            = 0
+Branchtaken_EX  = 0
+
+Flush_IF_ID     = 0
+Flush_ID_EX     = 0
+
+PC              = 40
+Next_PC         = 44
 ```
 
-Flush 없이 PC 순차 진행.
+`Branch_EX = 1`이지만 두 Register 값이 다르므로 `Zero = 0`.
+
+이에 따라 `Branchtaken_EX = 0`, `Flush_IF_ID = 0`, `Flush_ID_EX = 0`으로 유지되며 `Next_PC = 44`로 순차 진행.
 
 ![Branch Not Taken](image/branch_not_taken.png)
 
+---
+
 ### Branch Taken
+
+검증 명령어:
 
 ```text
 beq $10, $10, 4
 ```
 
-두 Register 값이 같으므로 `Zero = 1`.
+Instruction Code:
 
 ```text
-Branch_EX      = 1
-Zero           = 1
-Branchtaken_EX = 1
-Flush_IF_ID    = 1
-Flush_ID_EX    = 1
+0x114a0004
 ```
 
-Branch가 EX Stage에서 확정되는 시점에는 후속 명령어가 IF/ID와 ID/EX에 진입한 상태.
+두 Source Register 값이 동일하므로 Branch Taken 조건 성립.
 
-두 Pipeline Register를 Flush하고 Branch Target으로 PC 변경.
+### 파형 관측
 
-검증 시퀀스에서는 PC 44의 Branch 명령어 실행 후 PC 64로 분기하는 것을 확인.
+```text
+Instruction_EX  = 0x114a0004
+
+Branch_EX       = 1
+Zero            = 1
+Branchtaken_EX  = 1
+
+Flush_IF_ID     = 1
+Flush_ID_EX     = 1
+
+PC              = 52
+Next_PC         = 64
+```
+
+`Branch_EX = 1`, `Zero = 1`에 따라 `Branchtaken_EX = 1` 발생.
+
+Branch가 EX Stage에서 확정되는 시점에 이미 후속 명령어가 IF/ID와 ID/EX에 진입해 있으므로 `Flush_IF_ID = 1`, `Flush_ID_EX = 1` 발생.
+
+검증 시퀀스에서 Branch 명령어는 PC 44에서 실행되며, EX Stage에서 Branch가 확정된 시점의 `Next_PC[31:0] = 64`를 통해 Branch Target으로 변경되는 것을 확인.
 
 ![Branch Taken](image/branch_taken.png)
 
@@ -276,36 +377,42 @@ Branch가 EX Stage에서 확정되는 시점에는 후속 명령어가 IF/ID와 
 
 ## 6. Jump
 
-Jump는 Register 비교가 필요하지 않으므로 ID Stage에서 Jump Target 결정.
+Jump는 ID Stage에서 Target Address 결정.
 
-Jump가 결정되는 시점에는 후속 명령어가 IF/ID에만 진입한 상태이므로 IF/ID만 Flush.
-
-```text
-Flush_IF_ID = 1
-Flush_ID_EX = 0
-```
-
-검증 시퀀스:
+### 검증 명령어
 
 ```text
-PC68 : jump 20
-PC72 : 잘못 Fetch된 명령어 → Flush
-PC80 : Jump Target
+j 20
 ```
 
-Simulation에서 `Jump = 1`, `Flush_IF_ID = 1` 발생 후 Target PC인 80으로 이동하는 것을 확인.
+Instruction Code:
+
+```text
+0x08000014
+```
+
+### 파형 관측
+
+```text
+Instruction_ID = 0x08000014
+
+Jump           = 1
+Flush_IF_ID    = 1
+Flush_ID_EX    = 0
+
+PC             = 72
+Next_PC        = 80
+
+Instruction_IF = 0x00430820
+```
+
+`Instruction_ID = 0x08000014`인 Cycle에서 `Jump = 1` 발생.
+
+Jump Target이 ID Stage에서 결정되므로 이미 IF Stage에 들어온 `Instruction_IF = 0x00430820`만 제거하기 위해 `Flush_IF_ID = 1`.
+
+`Flush_ID_EX = 0`으로 유지되며 `Next_PC[31:0] = 80`을 통해 Jump Target으로 이동하는 것을 확인.
 
 ![Jump Flush](image/jump_flush.png)
-
----
-
-## WB → ID Bypass
-
-WB Stage의 Register Write와 ID Stage의 Register Read가 같은 Cycle에 발생할 경우 이전 Register 값이 읽히는 문제를 방지하기 위한 Bypass 경로 구성.
-
-WB의 Destination Register와 ID에서 읽는 Source Register가 같을 경우 Register File의 기존 값 대신 Write Back Data를 직접 전달.
-
-동일 Cycle의 Write Back 값을 ID Stage에서 바로 사용할 수 있도록 처리.
 
 ---
 
