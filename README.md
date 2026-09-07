@@ -70,12 +70,12 @@ Vivado Behavioral Simulation에서 Pipeline 내부 Data Path와 Control Signal�
 
 | 구분 | 검증 내용 |
 |---|---|
-| EX/MEM Forwarding | 직전 명령어의 연산 결과 전달 |
-| MEM/WB Forwarding | 이전 연산 결과의 WB Stage 전달 |
-| Forwarding Priority | 두 조건 동시 발생 시 최신 결과 선택 |
-| Load-use Hazard | 1-cycle Stall 및 이후 Forwarding |
-| Branch | Taken / Not Taken 및 Pipeline Flush |
-| Jump | Target 이동 및 IF Stage Flush |
+| EX/MEM Forwarding | 직전 명령어의 연산 결과를 다음 명령어가 사용할 때 EX/MEM 값이 ALU 입력으로 전달되는지 검증 |
+| MEM/WB Forwarding | 두 명령어 전의 연산 결과를 사용할 때 MEM/WB 값이 ALU 입력으로 전달되는지 검증 |
+| Forwarding Priority | EX/MEM과 MEM/WB 조건이 동시에 발생할 때 최신 결과인 EX/MEM 값이 선택되는지 검증 |
+| Load-use Hazard | `lw` 직후 Load Data를 사용하는 경우 1-cycle Stall 발생 후 정상적으로 Forwarding되는지 검증 |
+| Branch | `beq`의 Taken / Not Taken 동작과 Taken 시 후속 명령어가 Flush되는지 검증 |
+| Jump | Jump Target으로 PC가 변경되고 이미 Fetch된 후속 명령어가 Flush되는지 검증 |
 
 ---
 
