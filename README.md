@@ -12,7 +12,7 @@ Pipeline 구조와 Hazard 처리 로직을 RTL로 구현하고,
 - Control Hazard 처리: `Branch Flush`, `Jump Flush`
 - Hazard 및 Corner Case 기반 RTL Simulation 검증
 - STA 기반 Branch Critical Path 분석 및 RTL 구조 개선
-- **RTL 구조 개선을 통해 100 MHz에서 131.579 MHz까지 동작 주파수를 높이고, WNS `+0.200 ns`로 Timing 충족**
+- RTL 구조 개선을 통해 100 MHz에서 131.579 MHz까지 동작 주파수를 높이고, WNS `+0.200 ns`로 Timing 충족
 
 ---
 
