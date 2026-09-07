@@ -101,11 +101,6 @@ Load-use Hazard는 Forwarding만으로 처리할 수 없어
 **검증 명령어**
 
 ```text
-add $1, $2, $3
-sub $4, $1, $3
-```
-
-```text
 add $1, $2, $3  → 0x00430820
 sub $4, $1, $3  → 0x00232022
 ```
@@ -214,17 +209,13 @@ MEM/WB의 이전 값 `19`가 아닌 EX/MEM의 최신 값 `6`이 선택되는 것
 **검증 명령어**
 
 ```text
-lw  $6, 400($0)
-add $7, $5, $6
-```
-
-```text
 lw  $6, 400($0)  → 0x8c060190
 add $7, $5, $6   → 0x00a63820
 ```
 
 Load Data는 MEM Stage 이후에 유효해지므로
-바로 다음 명령어에서는 Forwarding만으로 처리할 수 없습니다.
+바로 다음 명령어에서는 Forwarding만으로 처리할 수 없어,
+**1-cycle Stall 후 MEM/WB Forwarding**하도록 구현했습니다.
 
 **Hazard 검출**
 
@@ -265,8 +256,8 @@ $6 = 100
 
 ## Control Hazard
 
-Branch와 Jump의 분기 결과가 확정되기 전에 Pipeline에 진입한 후속 명령어를
-`Flush`하여 Control Hazard를 처리했습니다.
+Branch와 Jump로 인해 실행 경로가 변경될 경우, 이미 Pipeline에 진입한 잘못된 
+후속 명령어를 Flush하여 Control Hazard를 처리했습니다.
 
 - Branch: EX Stage에서 Taken 판정
 - Jump: ID Stage에서 Target 결정
