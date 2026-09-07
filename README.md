@@ -12,7 +12,7 @@ Pipeline 구조와 Hazard 처리 로직을 RTL로 구현하고,
 - Control Hazard 처리: `Branch Flush`, `Jump Flush`
 - Hazard 및 Corner Case 기반 RTL Simulation 검증
 - STA 기반 Branch Critical Path 분석 및 RTL 구조 개선
-- RTL 구조 개선을 통해 최대 동작 주파수를 100 MHz에서 131 MHz로 약 31% 향상
+- RTL 구조 개선을 통해 최대 동작 주파수를 **100 MHz에서 131 MHz로 약 31% 향상**
 
 ---
 
@@ -119,11 +119,11 @@ ForwardA            = 10
 
 Read_data1          = 19
 Read_data2          = 10
-ALU_result           = 9
+ALU_result          = 9
 ```
 
 `ForwardA = 10`을 통해 EX/MEM의 결과 `19`가 ALU 입력으로 전달되고,
-`19 - 10 = 9`가 출력되는 것을 확인
+`19 - 10 = 9`가 출력되는 것을 확인했습니다.
 
 ![EX/MEM Forwarding](image/exmem_forwarding.png)
 
@@ -140,7 +140,7 @@ sub $4, $1, $3
 ```
 
 `nop`을 삽입하여 `sub`가 EX Stage에 진입할 때
-`add`의 결과가 WB Stage에 위치하도록 구성
+`add`의 결과가 WB Stage에 위치하도록 구성했습니다.
 
 **파형 관측**
 
@@ -154,11 +154,11 @@ ForwardA           = 01
 
 Read_data1         = 19
 Read_data2         = 10
-ALU_result          = 9
+ALU_result         = 9
 ```
 
-`ForwardA = 01`을 통해 WB Stage의 결과 `19`가 전달되고,
-`ALU_result = 9`가 출력되는 것을 확인
+`ForwardA = 01`을 통해 MEM/WB의 결과 `19`가 ALU 입력으로 전달되고,
+`ALU_result = 9`가 출력되는 것을 확인했습니다.
 
 ![MEM/WB Forwarding](image/memwb_forwarding.png)
 
@@ -166,8 +166,8 @@ ALU_result          = 9
 
 ### 3. Forwarding Priority
 
-EX/MEM과 MEM/WB에 동일한 Destination Register의 결과가 존재할 경우
-가장 최근 결과인 EX/MEM 값을 우선하도록 설계
+EX/MEM과 MEM/WB에 동일한 Destination Register의 결과가 존재할 경우,
+가장 최근 결과인 EX/MEM 값을 우선하도록 설계했습니다.
 
 **검증 명령어**
 
@@ -194,11 +194,11 @@ ForwardA           = 10
 
 Read_data1         = 6
 Read_data2         = 3
-ALU_result          = 9
+ALU_result         = 9
 ```
 
 두 조건이 동시에 성립한 상황에서 `ForwardA = 10`이 발생하고,
-MEM/WB의 이전 값 `19`가 아닌 EX/MEM의 최신 값 `6`이 선택되는 것을 확인
+MEM/WB의 이전 값 `19`가 아닌 EX/MEM의 최신 값 `6`이 선택되는 것을 확인했습니다.
 
 ![Forwarding Priority](image/forwarding_priority.png)
 
@@ -215,7 +215,7 @@ add $7, $5, $6   → 0x00a63820
 
 Load Data는 MEM Stage 이후에 유효해지므로
 바로 다음 명령어에서는 Forwarding만으로 처리할 수 없어,
-**1-cycle Stall 후 MEM/WB Forwarding**하도록 구현
+**1-cycle Stall 후 MEM/WB Forwarding**하도록 구현했습니다.
 
 **Hazard 검출**
 
@@ -230,14 +230,14 @@ Stall          = 1
 ```
 
 `lw`의 Destination Register `$6`을 다음 `add`가 사용하면서
-`Stall = 1`이 발생하고 PC가 1-cycle 유지되는 것을 확인
+`Stall = 1`이 발생하고 PC가 1-cycle 유지되는 것을 확인했습니다.
 
 **Stall 이후 Forwarding**
 
 ```text
 Write_data_reg_WB = 100
 ForwardB          = 1
-ALU_result         = 112
+ALU_result        = 112
 ```
 
 ```text
@@ -248,7 +248,7 @@ $6 = 100
 ```
 
 1-cycle Stall 이후 Load Data `100`이 Forwarding되고,
-최종적으로 `ALU_result = 112`가 출력되는 것을 확인
+최종적으로 `ALU_result = 112`가 출력되는 것을 확인했습니다.
 
 ![Load-use Hazard](image/load_use_stall.png)
 
@@ -256,8 +256,8 @@ $6 = 100
 
 ## Control Hazard
 
-Branch와 Jump로 인해 실행 경로가 변경될 경우, 이미 Pipeline에 진입한 잘못된 
-후속 명령어를 Flush하여 Control Hazard를 처리
+Branch와 Jump로 인해 실행 경로가 변경될 경우,
+이미 Pipeline에 진입한 잘못된 후속 명령어를 Flush하여 Control Hazard를 처리했습니다.
 
 - Branch: EX Stage에서 Taken 판정
 - Jump: ID Stage에서 Target 결정
@@ -294,7 +294,7 @@ Next_PC         = 44
 ```
 
 Branch 조건이 성립하지 않아 Flush 없이
-다음 PC로 순차 실행되는 것을 확인
+다음 PC로 순차 실행되는 것을 확인했습니다.
 
 ![Branch Not Taken](image/branch_not_taken.png)
 
@@ -323,7 +323,7 @@ Next_PC         = 64
 ```
 
 Branch Taken이 확정되면 IF/ID와 ID/EX에 진입한 후속 명령어를 Flush하고,
-`Next_PC = 64`로 Branch Target이 선택되는 것을 확인
+`Next_PC = 64`로 Branch Target이 선택되는 것을 확인했습니다.
 
 ![Branch Taken](image/branch_taken.png)
 
@@ -332,7 +332,7 @@ Branch Taken이 확정되면 IF/ID와 ID/EX에 진입한 후속 명령어를 Flu
 ### 6. Jump
 
 Jump는 ID Stage에서 Target을 결정하고,
-이미 IF Stage에 진입한 명령어를 Flush하도록 구현
+이미 IF Stage에 진입한 명령어를 Flush하도록 구현했습니다.
 
 **검증 명령어**
 
@@ -354,7 +354,7 @@ Next_PC        = 80
 ```
 
 `Flush_IF_ID = 1`을 통해 후속 명령어가 제거되고,
-`Next_PC = 80`으로 Jump Target이 선택되는 것을 확인
+`Next_PC = 80`으로 Jump Target이 선택되는 것을 확인했습니다.
 
 ![Jump Flush](image/jump_flush.png)
 
@@ -363,15 +363,15 @@ Next_PC        = 80
 ## Static Timing Analysis 및 Timing 최적화
 
 RTL Simulation을 통한 기능 검증 이후 Clock Constraint를 설정하고
-STA를 통해 Setup Timing을 검증
+STA를 통해 Setup Timing을 검증했습니다.
 
 초기 설계는 목표 주파수인 100 MHz에서 WNS `+0.042 ns`로
-Timing Constraint를 충족
+Timing Constraint를 충족했습니다.
 
 | 항목 | 초기 설계 |
 |---|---:|
 | Clock Period | 10.000 ns |
-| Clock Frequency | 100.000 MHz |
+| Clock Frequency | 100 MHz |
 | WNS | +0.042 ns |
 | TNS | 0.000 ns |
 | Failing Endpoints | 0 |
@@ -432,22 +432,22 @@ wire Branchtaken_EX =
 ```
 
 Forwarding이 적용된 두 ALU 입력값을 직접 비교하도록 변경하여
-Branch 판정 경로에서 ALU 연산과 Zero 판정을 제거하고, Critical Path의 조합논리 지연을 줄였습니다.
+Branch 판정 경로에서 ALU 연산과 Zero 판정을 제거하고,
+Critical Path의 조합논리 지연을 줄였습니다.
 
 ---
 
 ### 최종 Timing 결과
 
-RTL 구조 개선 후 Clock Period를 `7.600 ns`로 설정하여
-다시 STA를 수행했습니다.
+RTL 구조 개선 후 주파수를 단계적으로 높여가며 STA를 수행했습니다.
 
-주파수를 단계적으로 높여가며 STA를 수행한 결과,
-최대 `131.579 MHz`에서 모든 Timing Constraint를 충족했습니다.
+그 결과 최대 `131.579 MHz`에서 WNS `+0.200 ns`로
+Setup Timing을 충족했습니다.
 
 | 항목 | 초기 설계 | 최적화 후 |
 |---|---:|---:|
 | Clock Period | 10.000 ns | 7.600 ns |
-| Clock Frequency | 100.000 MHz | 131.579 MHz |
+| Clock Frequency | 100 MHz | 131.579 MHz |
 | WNS | +0.042 ns | +0.200 ns |
 | TNS | 0.000 ns | 0.000 ns |
 | Failing Endpoints | 0 | 0 |
@@ -456,7 +456,8 @@ RTL 구조 개선 후 Clock Period를 `7.600 ns`로 설정하여
 
 ![131.579MHz Timing Summary](image/timing_131_579mhz_summary.png)
 
-Branch 판정 경로의 RTL 구조를 개선한 뒤 131.579 MHz에서도 WNS +0.200 ns로 Timing Constraint를 충족했습니다.
+Branch 판정 경로의 RTL 구조 개선을 통해
+최대 동작 주파수를 약 **31% 향상**했습니다.
 
 ---
 
@@ -468,4 +469,4 @@ Branch 판정 경로의 RTL 구조를 개선한 뒤 131.579 MHz에서도 WNS +0.
 - Hazard 및 Corner Case RTL Simulation 검증
 - STA 기반 Branch Critical Path 분석
 - Branch 판정 경로의 ALU 연산 및 Zero 판정 제거
-- 131.579 MHz에서 WNS `+0.200 ns`로 Timing 충족
+- 최대 동작 주파수 **100 MHz → 131.579 MHz**, 약 **31% 향상**
