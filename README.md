@@ -441,7 +441,8 @@ Branch 판정 경로에서 ALU 연산과 Zero 판정을 제거하고, Critical P
 RTL 구조 개선 후 Clock Period를 `7.600 ns`로 설정하여
 다시 STA를 수행했습니다.
 
-약 `131.579 MHz` 조건에서도 모든 Timing Constraint를 충족했습니다.
+주파수를 단계적으로 높여가며 STA를 수행한 결과,
+최대 `131.579 MHz`에서 모든 Timing Constraint를 충족했습니다.
 
 | 항목 | 초기 설계 | 최적화 후 |
 |---|---:|---:|
