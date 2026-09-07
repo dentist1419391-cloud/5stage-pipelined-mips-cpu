@@ -1,88 +1,114 @@
-# 32-bit 5-Stage Pipelined MIPS CPU
+# 32-bit 5-stage Pipelined MIPS CPU
 
-Verilog HDL 기반의 32-bit 5-stage Pipelined MIPS CPU입니다.
+Verilog HDL로 설계한 32-bit 5-stage Pipeline MIPS CPU입니다.
 
-명령어 실행을 IF, ID, EX, MEM, WB의 5개 Stage로 구성하고, Pipeline에서 발생하는 Data Hazard와 Control Hazard를 처리하기 위한 Forwarding, Stall, Flush 로직을 구현했습니다.
+개인 프로젝트로 Pipeline 구조와 Hazard 처리 원리를 RTL 수준에서 구현하고,
+다양한 명령어 조합을 활용한 RTL Simulation과 STA를 통해 기능과 Timing을 검증했습니다.
 
-Hazard가 발생하는 명령어 시퀀스를 구성하고 Vivado Behavioral Simulation에서 Pipeline 내부 신호와 연산 결과를 검증했습니다. 합성 후에는 Static Timing Analysis를 통해 100 MHz Timing Constraint 만족 여부를 확인했습니다.
+### 주요 구현 및 성과
+
+- 5-stage Pipeline: `IF / ID / EX / MEM / WB`
+- Data Hazard 처리: `Forwarding`, `Load-use Stall`
+- Control Hazard 처리: `Branch Flush`, `Jump Flush`
+- 다양한 명령어 조합과 Corner Case 기반 RTL Simulation 검증
+- STA 기반 Critical Path 분석 및 조합논리 구조 개선
+- 최대 동작주파수 **101 MHz → 132 MHz, 약 31% 향상**
 
 ---
 
-## Development Environment
+## 개발 환경
 
-| Category | Description |
+| 구분 | 내용 |
 |---|---|
 | HDL | Verilog HDL |
 | Tool | Xilinx Vivado |
 | Architecture | 32-bit MIPS |
 | Pipeline | IF / ID / EX / MEM / WB |
-| Verification | Vivado Behavioral Simulation |
-| Timing Target | 100 MHz |
+| 기능 검증 | Vivado Behavioral Simulation |
+| Timing 검증 | Static Timing Analysis |
+| 목표 주파수 | 100 MHz |
 
-### Supported Instructions
+### 지원 명령어
 
-- R-Type : `add`, `sub`, `and`, `or`, `slt`
-- I-Type : `addi`, `lw`, `sw`, `beq`
-- J-Type : `j`
+- **R-Type**: `add`, `sub`, `and`, `or`, `slt`
+- **I-Type**: `addi`, `lw`, `sw`, `beq`
+- **J-Type**: `j`
 
 ---
 
-## Pipeline Structure
+## Pipeline 구조
 
-CPU를 IF, ID, EX, MEM, WB의 5개 Stage로 구성.
-
-각 Stage 사이에 Pipeline Register를 배치하여 Data와 Control Signal 전달.
+CPU를 `IF`, `ID`, `EX`, `MEM`, `WB`의 5개 Stage로 구성하고,
+각 Stage 사이에 Pipeline Register를 배치하여 Data와 Control Signal을 전달하도록 설계했습니다.
 
 - `IF/ID`
 - `ID/EX`
 - `EX/MEM`
 - `MEM/WB`
 
-| Stage | Function |
+| Stage | 주요 기능 |
 |---|---|
-| IF | Instruction Fetch |
-| ID | Instruction Decode / Register Read |
-| EX | ALU Operation / Branch Decision |
+| IF | Instruction Fetch, PC Update |
+| ID | Instruction Decode, Register Read |
+| EX | ALU Operation, Branch Decision |
 | MEM | Data Memory Access |
 | WB | Register Write Back |
 
 ### Pipeline 동작 확인
 
-Reset 해제 후 `PC[31:0]`가 `0 → 4 → 8 → 12 → ...` 순서로 증가하는 것을 확인.
+Reset 해제 후 `PC[31:0]`가 `0 → 4 → 8 → 12 → ...` 순서로 증가하는 것을 확인했습니다.
 
-첫 번째 `add $1, $2, $3` 명령어(`0x00430820`)가 `Instruction_IF` → `Instruction_ID` → `Instruction_EX` → `Instruction_MEM` → `Instruction_WB` 순서로 이동하며 5-stage Pipeline이 동작하는 것을 확인.
+첫 번째 `add $1, $2, $3` 명령어(`0x00430820`)가  
+`Instruction_IF → Instruction_ID → Instruction_EX → Instruction_MEM → Instruction_WB`  
+순서로 이동하는 것을 통해 5-stage Pipeline의 정상 동작을 확인했습니다.
 
 ![Pipeline Flow](image/pipeline_flow.png)
 
 ---
 
-# Verification
+# RTL Simulation 검증
 
-Hazard가 발생하도록 명령어 시퀀스를 구성하고 Vivado Behavioral Simulation에서 Pipeline 내부 Data Path와 Control Signal을 확인했습니다.
+Hazard가 발생하도록 명령어 시퀀스를 구성하고,
+Vivado Behavioral Simulation에서 Pipeline 내부 Data Path와 Control Signal을 관측했습니다.
+
+| 구분 | 검증 내용 |
+|---|---|
+| EX/MEM Forwarding | 직전 명령어의 연산 결과 전달 |
+| MEM/WB Forwarding | 한 명령어 이전의 연산 결과 전달 |
+| Forwarding Priority | EX/MEM과 MEM/WB 조건이 동시에 성립할 때 우선순위 확인 |
+| Load-use Hazard | 1-cycle Stall 및 이후 Forwarding 확인 |
+| Branch | Taken / Not Taken 및 Pipeline Flush 확인 |
+| Jump | Jump Target 이동 및 IF Stage Flush 확인 |
 
 ---
 
 ## Data Hazard
 
-이전 명령어의 연산 결과가 Register File에 반영되기 전에 다음 명령어가 해당 Register 값을 필요로 하는 경우 RAW Hazard 발생.
+이전 명령어의 연산 결과가 Register File에 반영되기 전에
+다음 명령어가 해당 Register 값을 필요로 하는 경우 RAW Hazard가 발생합니다.
 
-일반적인 RAW Hazard는 EX/MEM, MEM/WB Pipeline Register에 저장된 결과를 EX Stage의 ALU 입력으로 전달하는 Forwarding으로 처리.
+일반적인 RAW Hazard는 EX/MEM 또는 MEM/WB Pipeline Register에 저장된 결과를
+EX Stage의 ALU 입력으로 전달하는 Forwarding으로 처리했습니다.
 
-Forwarding Unit에서 EX Stage의 Source Register와 MEM, WB Stage의 Destination Register를 비교하여 `ForwardA[1:0]`, `ForwardB[1:0]` 신호 생성.
+Forwarding Unit에서는 EX Stage의 Source Register와
+MEM, WB Stage의 Destination Register를 비교하여
+`ForwardA[1:0]`, `ForwardB[1:0]` 신호를 생성합니다.
 
-- `Forward = 10` : EX/MEM 경로 선택
-- `Forward = 01` : MEM/WB 경로 선택
-- 두 조건이 동시에 성립하는 경우 EX/MEM Forwarding 우선
+- `Forward = 10`: EX/MEM 경로 선택
+- `Forward = 01`: MEM/WB 경로 선택
+- 두 조건이 동시에 성립하면 EX/MEM Forwarding 우선
 
-`lw` 직후 Load Data를 사용하는 Load-use Hazard는 Load Data가 MEM Stage 이후에 유효해지기 때문에 Forwarding만으로 처리할 수 없음.
+`lw` 직후 Load Data를 사용하는 Load-use Hazard는
+Load Data가 MEM Stage 이후에 유효해지므로 Forwarding만으로 처리할 수 없습니다.
 
-이 경우 1-cycle Stall과 Bubble을 삽입한 후 MEM/WB의 Load Data를 Forwarding하여 처리.
+따라서 1-cycle Stall과 Bubble을 삽입한 후
+MEM/WB Stage의 Load Data를 Forwarding하도록 설계했습니다.
 
 ---
 
 ## 1. EX/MEM Forwarding
 
-바로 이전 명령어의 연산 결과를 다음 명령어가 사용하는 경우.
+직전 명령어의 연산 결과를 다음 명령어가 바로 사용하는 경우입니다.
 
 ### 검증 명령어
 
@@ -98,7 +124,8 @@ add $1, $2, $3  → 0x00430820
 sub $4, $1, $3  → 0x00232022
 ```
 
-`sub` 명령어가 EX Stage에 진입한 시점에서 바로 이전 `add` 명령어는 MEM Stage에 위치.
+`sub` 명령어가 EX Stage에 진입할 때
+직전 `add` 명령어는 MEM Stage에 위치합니다.
 
 ### 파형 관측
 
@@ -116,9 +143,12 @@ Read_data2          = 10
 ALU_result           = 9
 ```
 
-`Write_register_MEM = 1`과 `rs_EX = 1`이 일치하고 `ForwardA = 10` 발생.
+`Write_register_MEM = 1`과 `rs_EX = 1`이 일치하면서
+`ForwardA = 10`이 발생하는 것을 확인했습니다.
 
-파형에서 `Read_data1 = 19`가 입력되고 `Read_data2 = 10`과 `sub` 연산 후 `ALU_result = 9`가 출력되는 것을 확인.
+EX/MEM Stage의 연산 결과 `19`가 ALU Operand로 전달되고,
+`19 - 10 = 9`의 결과가 출력되는 것을 통해
+EX/MEM Forwarding의 정상 동작을 검증했습니다.
 
 ![EX/MEM Forwarding](image/exmem_forwarding.png)
 
@@ -126,7 +156,7 @@ ALU_result           = 9
 
 ## 2. MEM/WB Forwarding
 
-한 명령어 간격을 두고 이전 연산 결과를 사용하는 경우.
+한 명령어 간격을 두고 이전 연산 결과를 사용하는 경우입니다.
 
 ### 검증 명령어
 
@@ -136,7 +166,8 @@ nop
 sub $4, $1, $3
 ```
 
-`nop`을 삽입하여 `sub` 명령어가 EX Stage에 진입할 때 `add`의 결과가 WB Stage에 위치하도록 구성.
+`nop`을 삽입하여 `sub` 명령어가 EX Stage에 진입할 때
+`add`의 결과가 WB Stage에 위치하도록 구성했습니다.
 
 ### 파형 관측
 
@@ -154,11 +185,13 @@ Read_data2         = 10
 ALU_result          = 9
 ```
 
-`Write_register_WB = 1`과 `rs_EX = 1`이 일치하고 EX/MEM Forwarding 조건은 성립하지 않는 상태.
+EX/MEM Forwarding 조건은 성립하지 않고
+`Write_register_WB = 1`과 `rs_EX = 1`이 일치하면서
+`ForwardA = 01`이 발생했습니다.
 
-이때 `ForwardA = 01`이 발생하며 WB Stage의 값을 사용.
-
-`Read_data1 = 19`, `Read_data2 = 10`, `ALU_result = 9`를 통해 MEM/WB Forwarding 동작 확인.
+WB Stage의 결과 `19`가 ALU Operand로 전달되고,
+최종 `ALU_result = 9`가 출력되는 것을 통해
+MEM/WB Forwarding을 검증했습니다.
 
 ![MEM/WB Forwarding](image/memwb_forwarding.png)
 
@@ -166,7 +199,8 @@ ALU_result          = 9
 
 ## 3. Forwarding Priority
 
-EX/MEM과 MEM/WB에 동일한 Destination Register의 결과가 존재하는 경우 가장 최근 연산 결과를 사용해야 함.
+EX/MEM과 MEM/WB Stage에 동일한 Destination Register의 결과가 존재하는 경우
+가장 최근에 연산된 값을 사용해야 합니다.
 
 ### 검증 명령어
 
@@ -180,11 +214,13 @@ add $4, $1, $7
 
 ```text
 첫 번째 add  → $1 = 19
-sub          → $1 = 6
-마지막 add   → $4 = 6 + 3 = 9
+sub           → $1 = 6
+마지막 add    → $4 = 6 + 3 = 9
 ```
 
-마지막 `add`가 `$1`을 사용할 때 MEM/WB에는 이전 값 `19`, EX/MEM에는 더 최근 값 `6`이 존재.
+마지막 `add`가 `$1`을 사용할 때
+MEM/WB에는 이전 값 `19`,
+EX/MEM에는 최신 값 `6`이 존재합니다.
 
 ### 파형 관측
 
@@ -202,11 +238,10 @@ Read_data2         = 3
 ALU_result          = 9
 ```
 
-MEM과 WB Stage의 Destination Register가 모두 `1`인 조건에서 `ForwardA = 10` 발생.
+두 Forwarding 조건이 동시에 성립한 상황에서
+`ForwardA = 10`이 발생하며 EX/MEM Stage의 최신 값 `6`이 선택되는 것을 확인했습니다.
 
-MEM/WB의 이전 값 `19`가 아닌 EX/MEM의 최신 값 `6`이 `Read_data1`에서 관측되며, 최종적으로 `ALU_result = 9` 출력.
-
-이를 통해 `EX/MEM > MEM/WB` Forwarding 우선순위 확인.
+이를 통해 `EX/MEM > MEM/WB`의 Forwarding 우선순위를 검증했습니다.
 
 ![Forwarding Priority](image/forwarding_priority.png)
 
@@ -214,7 +249,8 @@ MEM/WB의 이전 값 `19`가 아닌 EX/MEM의 최신 값 `6`이 `Read_data1`에�
 
 ## 4. Load-use Hazard
 
-`lw` 명령어가 Memory에서 읽은 값을 바로 다음 명령어가 사용하는 경우.
+`lw` 명령어가 Memory에서 읽어온 값을
+바로 다음 명령어가 사용하는 경우입니다.
 
 ### 검증 명령어
 
@@ -230,11 +266,13 @@ lw  $6, 400($0)  → 0x8c060190
 add $7, $5, $6   → 0x00a63820
 ```
 
-Load Data는 MEM Stage 이후에 유효해지므로 바로 다음 `add`의 EX Stage에서 사용할 수 없음.
+Load Data는 MEM Stage 이후에 유효해지므로
+바로 다음 `add`의 EX Stage에서 사용할 수 없습니다.
 
 ### Hazard 검출
 
-`lw`가 EX Stage, `add`가 ID Stage에 위치한 Cycle에서 다음 신호 확인.
+`lw`가 EX Stage,
+`add`가 ID Stage에 위치한 Cycle에서 다음 신호를 확인했습니다.
 
 ```text
 Instruction_EX = 0x8c060190
@@ -247,13 +285,13 @@ rt_ID          = 6
 Stall          = 1
 ```
 
-`MemRead_EX = 1`이고 `lw`의 Destination Register인 `$6`을 다음 `add`가 Source Register로 사용하므로 `Stall = 1` 발생.
+`lw`의 Destination Register `$6`을
+다음 `add`가 Source Register로 사용하면서 `Stall = 1`이 발생합니다.
 
-Stall이 발생한 동안 `PC[31:0]`가 `92`에서 한 Cycle 더 유지되어 PC Hold 동작 확인.
+Stall 동안 `PC[31:0]`가 `92`에서 한 Cycle 유지되는 것을 통해
+PC Hold 동작을 확인했습니다.
 
 ### Stall 이후 Forwarding
-
-Load Data가 WB Stage까지 이동한 후:
 
 ```text
 Write_data_reg_WB = 100
@@ -261,7 +299,8 @@ ForwardB          = 1
 ALU_result         = 112
 ```
 
-`Write_data_reg_WB[31:0] = 100`이 관측되고 Forwarding을 통해 `add`의 두 번째 Operand로 전달.
+Load Data `100`이 MEM/WB Stage에서 Forwarding되어
+`add` 명령어의 Operand로 전달됩니다.
 
 ```text
 $5 = 12
@@ -270,19 +309,22 @@ $6 = 100
 12 + 100 = 112
 ```
 
-최종 `ALU_result[31:0] = 112`를 통해 1-cycle Stall 이후 Load Data가 정상적으로 사용되는 것을 확인.
+최종 `ALU_result = 112`를 통해
+1-cycle Stall 이후 Load Data가 정상적으로 사용되는 것을 확인했습니다.
 
 ![Load-use Hazard](image/load_use_stall.png)
 
 ---
 
-## Control Hazard
+# Control Hazard
 
-Branch 또는 Jump의 분기 결과가 확정되기 전에 후속 명령어가 Pipeline에 진입하는 경우 Control Hazard 발생.
+Branch 또는 Jump의 Target이 결정되기 전에
+후속 명령어가 Pipeline에 진입하면서 Control Hazard가 발생할 수 있습니다.
 
-Branch는 EX Stage에서 Taken 여부 결정, Jump는 ID Stage에서 Target 결정.
+Branch는 EX Stage에서 Taken 여부를 결정하고,
+Jump는 ID Stage에서 Target을 결정하도록 구성했습니다.
 
-분기 결과에 따라 잘못 진입한 명령어를 Pipeline Register에서 Flush.
+분기 결과에 따라 잘못 진입한 명령어를 Pipeline Register에서 Flush합니다.
 
 ---
 
@@ -325,9 +367,11 @@ PC              = 40
 Next_PC         = 44
 ```
 
-`Branch_EX = 1`이지만 두 Register 값이 다르므로 `Zero = 0`.
+두 Register 값이 다르므로 `Zero = 0`,
+`Branchtaken_EX = 0`으로 유지됩니다.
 
-이에 따라 `Branchtaken_EX = 0`, `Flush_IF_ID = 0`, `Flush_ID_EX = 0`으로 유지되며 `Next_PC = 44`로 순차 진행.
+Flush가 발생하지 않고
+`Next_PC = 44`로 순차 실행되는 것을 확인했습니다.
 
 ![Branch Not Taken](image/branch_not_taken.png)
 
@@ -347,7 +391,7 @@ Instruction Code:
 0x114a0004
 ```
 
-두 Source Register 값이 동일하므로 Branch Taken 조건 성립.
+두 Source Register 값이 동일하므로 Branch Taken 조건이 성립합니다.
 
 ### 파형 관측
 
@@ -365,11 +409,14 @@ PC              = 52
 Next_PC         = 64
 ```
 
-`Branch_EX = 1`, `Zero = 1`에 따라 `Branchtaken_EX = 1` 발생.
+`Branch_EX = 1`, `Zero = 1`에 따라
+`Branchtaken_EX = 1`이 발생합니다.
 
-Branch가 EX Stage에서 확정되는 시점에 이미 후속 명령어가 IF/ID와 ID/EX에 진입해 있으므로 `Flush_IF_ID = 1`, `Flush_ID_EX = 1` 발생.
+Branch가 EX Stage에서 확정될 때
+이미 IF/ID와 ID/EX에 진입한 후속 명령어를 제거하기 위해
+`Flush_IF_ID = 1`, `Flush_ID_EX = 1`이 발생합니다.
 
-검증 시퀀스에서 Branch 명령어는 PC 44에서 실행되며, EX Stage에서 Branch가 확정된 시점의 `Next_PC[31:0] = 64`를 통해 Branch Target으로 변경되는 것을 확인.
+`Next_PC = 64`를 통해 Branch Target으로 정상적으로 이동하는 것을 확인했습니다.
 
 ![Branch Taken](image/branch_taken.png)
 
@@ -377,7 +424,7 @@ Branch가 EX Stage에서 확정되는 시점에 이미 후속 명령어가 IF/ID
 
 ## 6. Jump
 
-Jump는 ID Stage에서 Target Address 결정.
+Jump는 ID Stage에서 Target Address를 결정하도록 구성했습니다.
 
 ### 검증 명령어
 
@@ -406,20 +453,49 @@ Next_PC        = 80
 Instruction_IF = 0x00430820
 ```
 
-`Instruction_ID = 0x08000014`인 Cycle에서 `Jump = 1` 발생.
+Jump Target이 ID Stage에서 결정되므로
+이미 IF Stage에 진입한 명령어만 제거하기 위해
+`Flush_IF_ID = 1`이 발생합니다.
 
-Jump Target이 ID Stage에서 결정되므로 이미 IF Stage에 들어온 `Instruction_IF = 0x00430820`만 제거하기 위해 `Flush_IF_ID = 1`.
-
-`Flush_ID_EX = 0`으로 유지되며 `Next_PC[31:0] = 80`을 통해 Jump Target으로 이동하는 것을 확인.
+`Flush_ID_EX = 0`으로 유지되고
+`Next_PC = 80`으로 변경되는 것을 통해 Jump 동작을 검증했습니다.
 
 ![Jump Flush](image/jump_flush.png)
 
 ---
 
-## Static Timing Analysis
+# Static Timing Analysis 및 Timing 최적화
 
-합성 후 Static Timing Analysis를 통해 목표 주파수 100 MHz에서 Setup Timing 확인.
+기능 검증 이후 Clock Constraint를 설정하고
+Static Timing Analysis를 수행하여 FPGA 구현 시 Timing을 검증했습니다.
 
-초기 STA에서 Branch 관련 경로가 Critical Path를 형성하며 Setup Timing 위반 발생.
+초기 분석에서 Branch 명령어 경로가 Critical Path를 형성하는 것을 확인했습니다.
 
-Timing Path 분석 후 Branch 경로의 조합논리 구조를 개선하고 다시 STA를 수행하여 100 MHz Timing Constraint 충족.
+Timing Path를 분석한 뒤 해당 경로의 조합논리 구조를 개선하고
+다시 STA를 수행하여 Timing 성능을 비교했습니다.
+
+| 구분 | 개선 전 | 개선 후 |
+|---|---:|---:|
+| 최대 동작주파수 | 101 MHz | 132 MHz |
+| 성능 향상 | - | 약 31% |
+
+조합논리 구조 개선을 통해 최대 동작주파수를
+**101 MHz에서 132 MHz로 약 31% 향상**시켰으며,
+목표 주파수인 100 MHz Timing Constraint를 충족했습니다.
+
+이를 통해 RTL 기능 검증뿐 아니라
+Critical Path를 분석하고 RTL 구조를 개선하여
+Timing 성능을 최적화하는 과정을 경험했습니다.
+
+---
+
+# 프로젝트 결과
+
+- Verilog HDL 기반 32-bit 5-stage Pipeline CPU 설계
+- `IF / ID / EX / MEM / WB` Pipeline 구조 구현
+- `Forwarding`, `Load-use Stall`을 통한 Data Hazard 처리
+- `Branch Flush`, `Jump Flush`를 통한 Control Hazard 처리
+- 다양한 Hazard와 Corner Case를 RTL Simulation으로 검증
+- STA 기반 Branch Critical Path 분석
+- 조합논리 구조 개선을 통해 최대 동작주파수 **101 MHz → 132 MHz**
+- 최대 동작주파수 약 **31% 향상**
