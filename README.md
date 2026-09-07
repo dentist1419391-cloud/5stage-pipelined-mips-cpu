@@ -384,9 +384,9 @@ Timing Constraint를 충족
 
 ### Critical Path 분석
 
-- Clock Period를 줄여가며 STA 수행
-- Setup Timing Violation 발생 구간의 Worst Timing Path 추적
-- 분석 결과, **Branch 판정 경로가 Critical Path임을 확인**
+- 100 MHz에서 Timing Constraint 충족 후 Clock Period를 줄여가며 STA 수행
+- 101 MHz에서 Setup Timing Violation 발생
+- Worst Timing Path 추적 결과, **Branch 판정 경로가 Critical Path임을 확인**
 
 ```text
 ID/EX Register
