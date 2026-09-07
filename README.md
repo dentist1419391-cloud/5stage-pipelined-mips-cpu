@@ -1,4 +1,4 @@
-# 32-bit 5-stage Pipelined MIPS CPU
+# 32-bit 5-stage Pipeline MIPS CPU
 
 Verilog HDL로 설계한 32-bit 5-stage Pipeline MIPS CPU입니다.
 
