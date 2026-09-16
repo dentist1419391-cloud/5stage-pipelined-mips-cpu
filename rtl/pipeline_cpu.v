@@ -8,12 +8,12 @@ module pipeline_cpu(
     output        RegWrite_out
     );
     
-    
-    wire Stall;
-    
+    reg [31:0] forward_data1;
+    reg [31:0] forward_data2;
+    wire Stall;   
     wire Branch_EX;
     wire Zero;
-    wire Branchtaken_EX=Branch_EX&&Zero;
+    wire Branchtaken_EX=Branch_EX && (forward_data1 == forward_data2);
     wire Jump;
     
     wire [4:0] rd_MEM;
@@ -214,8 +214,7 @@ module pipeline_cpu(
     wire [1:0] ForwardB;
     wire [31:0] ALU_result_MEM;
     
-    reg [31:0] forward_data1;
-    reg [31:0] forward_data2;
+
     
     
     always@(*) begin
